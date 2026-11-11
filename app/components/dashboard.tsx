@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { artistsByTime, buildRaw, type GenreCache } from "@/lib/build";
+import { fetchGenres, loadGenreCache } from "@/lib/genres-client";
+import type { ImportResult } from "@/lib/import";
 import {
   WEEKDAYS,
   cap,
@@ -29,6 +32,7 @@ import {
 } from "@/lib/history";
 import { BarList, Heatmap, TimeChart, type BarRow, type Metric } from "./charts";
 import { Hero } from "./hero";
+import { UploadPanel } from "./upload";
 
 const GRANS: [Granularity, string][] = [
   ["day", "Dia"],
@@ -38,9 +42,17 @@ const GRANS: [Granularity, string][] = [
   ["all", "Todo o período"],
 ];
 
+type Who = "me" | "you";
+const GENRE_BATCH = 50;
+
 export default function Dashboard() {
-  const [ds, setDs] = useState<Dataset | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Default dataset: public/data/history.json, built by `npm run data`. Optional.
+  const [own, setOwn] = useState<Dataset | "loading" | "missing">("loading");
+  const [mode, setMode] = useState<"own" | "form" | "upload">("own");
+  const [upload, setUpload] = useState<ImportResult | null>(null);
+  const [genreCache, setGenreCache] = useState<GenreCache>({});
+  const [lookup, setLookup] = useState<{ done: number; total: number } | null>(null);
+  const abort = useRef<AbortController | null>(null);
 
   useEffect(() => {
     fetch("/data/history.json")
@@ -48,48 +60,198 @@ export default function Dashboard() {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
-      .then((raw) => setDs(decode(raw)))
-      .catch((e) => setError(String(e)));
+      .then((raw) => setOwn(decode(raw)))
+      .catch(() => {
+        setOwn("missing");
+        setMode((m) => (m === "own" ? "form" : m));
+      });
+    return () => abort.current?.abort();
   }, []);
 
-  if (error)
+  const uploadDs = useMemo(() => (upload ? decode(buildRaw(upload.rows, genreCache)) : null), [upload, genreCache]);
+  const topArtists = useMemo(() => (upload ? artistsByTime(upload.rows) : []), [upload]);
+  const missingGenres = topArtists.filter((a) => !(a in genreCache));
+
+  function loaded(r: ImportResult) {
+    abort.current?.abort();
+    setLookup(null);
+    setUpload(r);
+    setGenreCache(loadGenreCache());
+    setMode("upload");
+  }
+
+  async function findGenres() {
+    const todo = missingGenres.slice(0, GENRE_BATCH);
+    if (!todo.length) return;
+    const ctrl = new AbortController();
+    abort.current = ctrl;
+    setLookup({ done: 0, total: todo.length });
+    await fetchGenres(
+      todo,
+      (cache, done) => {
+        if (ctrl.signal.aborted) return;
+        setGenreCache(cache);
+        setLookup({ done, total: todo.length });
+      },
+      ctrl.signal,
+    );
+    if (abort.current === ctrl) setLookup(null);
+  }
+
+  function stopGenres() {
+    abort.current?.abort();
+    setLookup(null);
+  }
+
+  const ownReady = own !== "loading" && own !== "missing";
+
+  if (mode === "form")
     return (
-      <Shell>
-        <div className="rounded-xl border border-line bg-card p-6">
-          <h2 className="text-lg font-semibold">Dados não encontrados</h2>
-          <p className="mt-2 text-ink-2">
-            Gere o arquivo com <code className="rounded bg-surface-2 px-1">npm run data</code> (lê o export extraído de{" "}
-            <code className="rounded bg-surface-2 px-1">my_spotify_data.zip</code>).
-          </p>
-          <p className="mt-2 text-xs text-muted">{error}</p>
-        </div>
+      <Shell who="you">
+        <UploadPanel
+          onLoaded={loaded}
+          onCancel={upload ? () => setMode("upload") : ownReady ? () => setMode("own") : undefined}
+        />
       </Shell>
     );
-  if (!ds)
+
+  if (mode === "upload" && upload && uploadDs)
+    return (
+      <Loaded
+        key="upload"
+        ds={uploadDs}
+        who="you"
+        actions={
+          <>
+            <HeroBtn onClick={() => setMode("form")}>Enviar outros arquivos</HeroBtn>
+            {ownReady && <HeroBtn onClick={() => setMode("own")}>Voltar ao histórico original</HeroBtn>}
+          </>
+        }
+        notice={
+          <UploadNotice
+            upload={upload}
+            missing={missingGenres.length}
+            total={topArtists.length}
+            lookup={lookup}
+            onFind={findGenres}
+            onStop={stopGenres}
+          />
+        }
+      />
+    );
+
+  if (!ownReady)
     return (
       <Shell>
-        <p className="py-24 text-center text-ink-2">Carregando seu histórico…</p>
+        <p className="py-24 text-center text-ink-2">Carregando…</p>
       </Shell>
     );
-  return <Loaded ds={ds} />;
+
+  return (
+    <Loaded
+      key="own"
+      ds={own}
+      who="me"
+      actions={<HeroBtn onClick={() => setMode(upload ? "upload" : "form")}>{upload ? "Ver o histórico enviado" : "Ver o seu histórico"}</HeroBtn>}
+    />
+  );
 }
 
-function Shell({ ds = null, children }: { ds?: Dataset | null; children: ReactNode }) {
+function Shell({ ds = null, who = "me", actions, children }: { ds?: Dataset | null; who?: Who; actions?: ReactNode; children: ReactNode }) {
   return (
     <>
-      <Hero ds={ds} />
+      <Hero ds={ds} who={who} actions={actions} />
       <main className="mx-auto w-full max-w-6xl overflow-x-clip px-4 pb-8 sm:px-6">{children}</main>
     </>
   );
 }
 
-function Loaded({ ds }: { ds: Dataset }) {
+function HeroBtn({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-white/20"
+    >
+      {children}
+    </button>
+  );
+}
+
+function UploadNotice({
+  upload,
+  missing,
+  total,
+  lookup,
+  onFind,
+  onStop,
+}: {
+  upload: ImportResult;
+  missing: number;
+  total: number;
+  lookup: { done: number; total: number } | null;
+  onFind: () => void;
+  onStop: () => void;
+}) {
+  const next = Math.min(GENRE_BATCH, missing);
+  const fresh = missing === total;
+  return (
+    <section className="my-6 rounded-xl border border-line bg-card p-4 text-sm text-ink-2">
+      <p>
+        Lido de {upload.files.length === 1 ? upload.files[0] : `${fmtInt(upload.files.length)} arquivos`}. Tudo foi calculado aqui no
+        seu navegador.
+        {upload.basic && (
+          <>
+            {" "}
+            Esse é o histórico curto do Spotify: cobre só o último ano e não tem álbuns nem pulos, então alguns quadros vão ficar
+            vazios.
+          </>
+        )}
+      </p>
+      {lookup ? (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <span>
+            Buscando gêneros no MusicBrainz… {lookup.done} de {lookup.total}
+          </span>
+          <progress className="h-1.5 w-40 accent-[var(--accent)]" value={lookup.done} max={lookup.total} />
+          <button type="button" onClick={onStop} className="text-ink underline">
+            Parar
+          </button>
+        </div>
+      ) : (
+        next > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <span>
+              {(fresh ? "O Spotify não informa o gênero das músicas. " : "") +
+                `Dá para buscar no MusicBrainz o gênero ${fresh ? `dos ${next} artistas que você mais ouve` : `de mais ${next} artistas`}. ` +
+                `Leva cerca de ${Math.max(1, Math.round((next * 1.1) / 60))} min, e só os nomes dos artistas saem do seu computador.`}
+            </span>
+            <button type="button" onClick={onFind} className="rounded-full bg-accent px-3 py-1 text-sm font-semibold text-on-accent">
+              Buscar gêneros
+            </button>
+          </div>
+        )
+      )}
+    </section>
+  );
+}
+
+function Loaded({ ds, who, actions, notice }: { ds: Dataset; who: Who; actions?: ReactNode; notice?: ReactNode }) {
   const firstT = ds.t[0];
   const lastT = ds.t[ds.n - 1];
   const [g, setG] = useState<Granularity>("year");
   const [anchor, setAnchor] = useState<Date>(() => new Date(lastT));
   const [filters, setFilters] = useState<Filters>({ artist: null, genre: null });
   const [metric, setMetric] = useState<Metric>("ms");
+  // Genre ids shift when new genres arrive (uploads): keep the selected genre by name.
+  const [prevGenres, setPrevGenres] = useState(ds.genres);
+  if (prevGenres !== ds.genres) {
+    setPrevGenres(ds.genres);
+    if (filters.genre !== null) {
+      const i = ds.genres.indexOf(prevGenres[filters.genre]);
+      setFilters((f) => ({ ...f, genre: i < 0 ? null : i }));
+    }
+  }
 
   const start = useMemo(() => periodStart(anchor, g), [anchor, g]);
   const range = useMemo(() => periodRange(ds, start, g), [ds, start, g]);
@@ -131,7 +293,8 @@ function Loaded({ ds }: { ds: Dataset }) {
   };
 
   return (
-    <Shell ds={ds}>
+    <Shell ds={ds} who={who} actions={actions}>
+      {notice}
       {/* Controls */}
       <div className="z-20 -mx-4 sm:sticky sm:top-0 mb-6 border-b border-line bg-page/90 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
         <div className="flex flex-wrap items-center gap-2">
@@ -305,10 +468,17 @@ function Loaded({ ds }: { ds: Dataset }) {
         </Card>
       </div>
 
-      <footer className="mt-12 border-t border-line pt-4 text-xs text-muted">
-        Durações das músicas são estimadas pela reprodução completa mais longa (o export do Spotify não traz a duração). Gêneros
-        vêm das tags de artistas do MusicBrainz ({fmtInt(ds.genresCovered)} artistas consultados) e foram agrupados em estilos
-        amplos. Uma “reprodução” conta quando você ouviu ao menos 30 s. Dados gerados em {fmtDateTime(Date.parse(ds.generatedAt))}.
+      <footer className="mt-12 space-y-1 border-t border-line pt-4 text-xs text-muted">
+        <p>
+          O Spotify não informa quanto dura cada música, então a duração aqui é a da reprodução mais longa que foi até o fim. Uma
+          &ldquo;reprodução&rdquo; só conta a partir de 30 s ouvidos, o mesmo critério do Spotify.
+        </p>
+        <p>
+          {ds.genresCovered
+            ? `Os gêneros saem das tags dos artistas no MusicBrainz (${fmtInt(ds.genresCovered)} artistas consultados), agrupadas em estilos mais amplos.`
+            : "Sem gêneros por enquanto: nenhum artista foi consultado no MusicBrainz."}{" "}
+          {who === "me" ? `Dados gerados em ${fmtDateTime(Date.parse(ds.generatedAt))}.` : "Seus arquivos foram lidos só no seu navegador."}
+        </p>
       </footer>
     </Shell>
   );

@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Meu histórico no Spotify",
-  description: "Visualização do histórico de músicas do Spotify",
+  title: "Histórico do Spotify",
+  description: "Solte o zip do Spotify e veja o que você mais ouviu, quando e por quanto tempo.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

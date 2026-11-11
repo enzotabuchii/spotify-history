@@ -1,16 +1,5 @@
 // Data model + aggregations for the Spotify history dashboard (runs in the browser).
-
-type RawData = {
-  generatedAt: string;
-  genresCovered: number;
-  artists: [name: string, genre: number, tags: string[]][];
-  albums: string[];
-  genres: string[];
-  platforms: string[];
-  reasons: string[];
-  tracks: [name: string, artist: number, album: number, durMs: number, maxPlayedMs: number][];
-  plays: { t: number[]; k: number[]; ms: number[]; f: number[]; rs: number[]; re: number[]; p: number[] };
-};
+import type { RawData } from "./build";
 
 export type Dataset = {
   generatedAt: string;

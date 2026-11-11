@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { fmtDate, fmtInt, rank, select, timeline, type Dataset } from "@/lib/history";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -28,7 +28,7 @@ export function Logo({ size = 44 }: { size?: number }) {
 
 const UNKNOWN = "Sem gênero identificado";
 
-export function Hero({ ds }: { ds: Dataset | null }) {
+export function Hero({ ds, who = "me", actions }: { ds: Dataset | null; who?: "me" | "you"; actions?: ReactNode }) {
   const info = useMemo(() => {
     if (!ds) return null;
     const all = select(ds, { from: -Infinity, to: Infinity }, { artist: null, genre: null });
@@ -44,7 +44,10 @@ export function Hero({ ds }: { ds: Dataset | null }) {
     const top = <T extends { ms: number }>(rows: T[]) => rows.sort((a, b) => b.ms - a.ms)[0];
     const artist = top(rank(ds, all, "artist"));
     const track = rank(ds, all, "track").sort((a, b) => b.streams - a.streams)[0];
-    const genre = top(rank(ds, all, "genre").filter((r) => ds.genres[r.id] !== UNKNOWN));
+    const known = rank(ds, all, "genre").filter((r) => ds.genres[r.id] !== UNKNOWN);
+    // Only name a favorite style when we know the genre of a good chunk of the listening time.
+    const knownMs = known.reduce((sum, r) => sum + r.ms, 0);
+    const genre = knownMs >= ms * 0.3 ? top(known) : undefined;
     const bestYear = [...years.entries()].sort((a, b) => b[1] - a[1])[0];
     const months = timeline(ds, all, new Date(), "all").buckets.map((b) => b.ms);
     const spanYears = (ds.t[ds.n - 1] - ds.t[0]) / (365.25 * 86_400_000);
@@ -76,20 +79,28 @@ export function Hero({ ds }: { ds: Dataset | null }) {
 
         <div className="mt-8 flex flex-col gap-2 sm:mt-10">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-spotify">
-            {info ? `${info.spanYears.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} anos de música` : "Carregando…"}
+            {info ? spanLabel(info.spanYears) : who === "you" ? "Do zip para os gráficos" : "Carregando…"}
           </p>
-          <h1 className="text-4xl font-extrabold tracking-tight sm:text-6xl">Meu histórico no Spotify</h1>
-          {ds && (
+          <h1 className="text-4xl font-extrabold tracking-tight sm:text-6xl">{who === "me" ? "Meu" : "Seu"} histórico no Spotify</h1>
+          {ds ? (
             <p className="max-w-2xl text-base text-white/80 sm:text-lg">
-              Tudo o que tocou de {fmtDate(ds.t[0])} a {fmtDate(ds.t[ds.n - 1])}: por dia, semana, mês ou ano, por artista e por
-              estilo.
+              Tudo o que tocou de {fmtDate(ds.t[0])} a {fmtDate(ds.t[ds.n - 1])}, por dia, semana, mês ou ano. Dá para filtrar por
+              artista e por estilo.
             </p>
+          ) : (
+            who === "you" && (
+              <p className="max-w-2xl text-base text-white/80 sm:text-lg">
+                Pegue o arquivo que o Spotify manda com tudo o que você já ouviu e veja quanto tempo passou com cada artista, a que horas
+                você mais escuta, o que mais pula e por aí vai.
+              </p>
+            )
           )}
+          {actions && <div className="mt-3 flex flex-wrap gap-2">{actions}</div>}
         </div>
 
         {ds && info && (
           <dl className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Highlight k="Horas ouvidas" v={`${fmtInt(Math.round(info.ms / 3_600_000))} h`} d={`≈ ${fmtInt(Math.round(info.ms / 86_400_000))} dias sem parar`} />
+            <Highlight k="Horas ouvidas" v={`${fmtInt(Math.round(info.ms / 3_600_000))} h`} d={daysNonStop(info.ms)} />
             <Highlight k="Reproduções" v={fmtInt(info.streams)} d={`${fmtInt(ds.trackName.length)} músicas · ${fmtInt(ds.artistName.length)} artistas`} />
             <Highlight k="Artista nº 1" v={ds.artistName[info.artist.id]} d={`${fmtInt(Math.round(info.artist.ms / 3_600_000))} h juntos`} />
             <Highlight
@@ -116,6 +127,20 @@ export function Hero({ ds }: { ds: Dataset | null }) {
       </div>
     </header>
   );
+}
+
+function daysNonStop(ms: number) {
+  const d = Math.round(ms / 86_400_000);
+  if (d < 1) return "menos de 1 dia sem parar";
+  return `≈ ${fmtInt(d)} ${d === 1 ? "dia" : "dias"} sem parar`;
+}
+
+function spanLabel(years: number) {
+  if (years < 1) {
+    const months = Math.max(1, Math.round(years * 12));
+    return `${months} ${months === 1 ? "mês" : "meses"} de música`;
+  }
+  return `${years.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} anos de música`;
 }
 
 function Highlight({ k, v, d }: { k: string; v: string; d: string }) {
