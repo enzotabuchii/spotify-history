@@ -1,26 +1,111 @@
 @import "tailwindcss";
 
+/* Spotify-inspired palette: green on near-black. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+  --page: #f4f6f4;
+  --card: #ffffff;
+  --surface-2: #e9ede9;
+  --line: #dde3de;
+  --ink: #121212;
+  --ink-2: #4d524e;
+  --muted: #717872;
+  /* darker greens in light mode so marks/text keep contrast on white */
+  --accent: #179443;
+  --accent-strong: #0f6f31;
+  --accent-text: #0f7a36;
+  --on-accent: #000000;
+  /* sequential green ramp, near-surface -> strong */
+  --seq-0: #e9ede9;
+  --seq-1: #d0f3dc;
+  --seq-2: #a3e8bb;
+  --seq-3: #6dd694;
+  --seq-4: #36bf69;
+  --seq-5: #1c9f4e;
+  --seq-6: #127d3c;
+  --seq-7: #0a5528;
+}
+
+/* Theme: no data-theme = follow the system; data-theme="light|dark" = user choice. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #121212;
+    --card: #181818;
+    --surface-2: #282828;
+    --line: #2a2a2a;
+    --ink: #ffffff;
+    --ink-2: #b3b3b3;
+    --muted: #8a8a8a;
+    --accent: #1ed760;
+    --accent-strong: #3be477;
+    --accent-text: #1ed760;
+    --on-accent: #000000;
+    --seq-0: #242424;
+    --seq-1: #0f3b21;
+    --seq-2: #13572f;
+    --seq-3: #17753e;
+    --seq-4: #1a9a4f;
+    --seq-5: #1db954;
+    --seq-6: #1ed760;
+    --seq-7: #8ff0b1;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #121212;
+  --card: #181818;
+  --surface-2: #282828;
+  --line: #2a2a2a;
+  --ink: #ffffff;
+  --ink-2: #b3b3b3;
+  --muted: #8a8a8a;
+  --accent: #1ed760;
+  --accent-strong: #3be477;
+  --accent-text: #1ed760;
+  --on-accent: #000000;
+  --seq-0: #242424;
+  --seq-1: #0f3b21;
+  --seq-2: #13572f;
+  --seq-3: #17753e;
+  --seq-4: #1a9a4f;
+  --seq-5: #1db954;
+  --seq-6: #1ed760;
+  --seq-7: #8ff0b1;
+}
+
+/* Header is always the dark green -> black gradient, like a Spotify playlist header. */
+.hero {
+  background:
+    radial-gradient(80% 120% at 0% 0%, rgb(30 215 96 / 0.35) 0%, transparent 60%),
+    radial-gradient(60% 80% at 100% 0%, rgb(29 185 84 / 0.18) 0%, transparent 70%),
+    linear-gradient(180deg, #1a5c34 0%, #133d24 45%, #121212 100%);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-page: var(--page);
+  --color-card: var(--card);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-text: var(--accent-text);
+  --color-on-accent: var(--on-accent);
+  --color-spotify: #1ed760;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  transition: background-color 0.2s;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
 }

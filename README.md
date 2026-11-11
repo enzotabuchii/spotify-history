@@ -1,36 +1,29 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Meu histórico no Spotify
 
-## Getting Started
+Site para visualizar o histórico estendido do Spotify (`my_spotify_data.zip`): por dia, semana, mês, ano ou todo o
+período, com filtro por artista e por estilo musical, músicas mais longas/curtas e outras curiosidades.
 
-First, run the development server:
+## Como usar
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1. Peça seu histórico em <https://www.spotify.com/account/privacy/> (opção **Extended streaming history**) e extraia
+   o zip. Por padrão os scripts procuram em `~/Downloads/my_spotify_data/Spotify Extended Streaming History`; para
+   outro lugar, defina `SPOTIFY_DATA_DIR`.
+2. (Opcional, ~1 s por artista) Busque os gêneros no MusicBrainz para os N artistas mais ouvidos:
+   ```bash
+   npm run genres -- 1000
+   ```
+   O resultado fica em `data/genres.json` e o script continua de onde parou se for interrompido.
+3. Gere o dataset do site e rode:
+   ```bash
+   npm run data
+   npm run dev
+   ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Os dados pessoais (`data/` e `public/data/`) estão no `.gitignore`. O dataset gerado não inclui endereço IP.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Observações
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- O export do Spotify não traz a duração das faixas nem o gênero. A duração é estimada pela reprodução mais longa que
+  terminou com a faixa chegando ao fim; os gêneros vêm das tags do MusicBrainz, agrupadas em estilos amplos
+  (regras em `scripts/build-data.mjs`).
+- Uma “reprodução” conta a partir de 30 s ouvidos (mesmo critério do Spotify). “Pulo” = botão de avançar.
