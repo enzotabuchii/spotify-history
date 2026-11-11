@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# dados pessoais do Spotify (gerados localmente)
+/data/
+/public/data/
